@@ -5775,6 +5775,148 @@ export class SamImageSegmentationOutput extends ModelOutput {
 //////////////////////////////////////////////////
 
 
+
+//////////////////////////////////////////////////
+export class U2NetPreTrainedModel extends PreTrainedModel { }
+
+/**
+ * TODO U2Net description.
+ *
+ * **Example:** Perform mask generation with `BritishWerewolf/U2Net`.
+ * ```javascript
+ * import { U2NetModel, AutoProcessor, RawImage } from '@huggingface/transformers';
+ *
+ * const model = await U2NetModel.from_pretrained('BritishWerewolf/U2Net');
+ * const processor = await AutoProcessor.from_pretrained('BritishWerewolf/U2Net');
+ *
+ * const img_url = 'https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png';
+ * const raw_image = await RawImage.read(img_url);
+ * const inputs = await processor(raw_image);
+ * const outputs = await model(inputs);
+ *
+ * const masks = await processor.post_process_masks(outputs.pred_masks, inputs.original_sizes, inputs.reshaped_input_sizes);
+ * // [
+ * //   Tensor {
+ * //     dims: [ 1, 3, 1764, 2646 ],
+ * //     type: 'bool',
+ * //     data: Uint8Array(14002632) [ ... ],
+ * //     size: 14002632
+ * //   }
+ * // ]
+ * const scores = outputs.iou_scores;
+ * // Tensor {
+ * //   dims: [ 1, 1, 3 ],
+ * //   type: 'float32',
+ * //   data: Float32Array(3) [
+ * //     0.8892380595207214,
+ * //     0.9311248064041138,
+ * //     0.983696699142456
+ * //   ],
+ * //   size: 3
+ * // }
+ * ```
+ */
+export class U2NetModel extends U2NetPreTrainedModel {
+
+    /**
+     * Compute image embeddings and positional image embeddings, given the pixel values of an image.
+     * @param {Object} model_inputs Object containing the model inputs.
+     * @param {Tensor} model_inputs.pixel_values Pixel values obtained using a `U2NetProcessor`.
+     * @returns {Promise<{ image_embeddings: Tensor, image_positional_embeddings: Tensor }>} The image embeddings and positional image embeddings.
+     */
+    async get_image_embeddings({ pixel_values }) {
+        // in:
+        //  - pixel_values: tensor.float32[batch_size,3,1024,1024]
+        //
+        // out:
+        //  - image_embeddings: tensor.float32[batch_size,256,64,64]
+        //  - image_positional_embeddings: tensor.float32[batch_size,256,64,64]
+        return await encoderForward(this, { pixel_values })
+    }
+
+    /**
+     * @typedef {{ input: Tensor }} U2NetModelInput
+     * @param {U2NetModelInput} model_inputs Object containing the model inputs.
+     * @returns {Promise<Object>} The output of the model.
+     */
+    async forward(model_inputs) {
+        // Check that 'model' session exists
+        if (!this.sessions.model) {
+            throw new Error("Model session not found. Ensure that the 'model' session is loaded correctly.");
+        }
+
+        /**
+         * Use sessionRun with the 'model' session to execute the model
+         * @type {U2NetModelInput}
+         */
+        const inputs = {
+            'input': model_inputs.input,
+        };
+
+        /**
+         * The outputs for the model session.
+         * @type {{
+         *   1876: Tensor,
+         *   1877: Tensor,
+         *   1878: Tensor,
+         *   1879: Tensor,
+         *   1880: Tensor,
+         *   1881: Tensor,
+         *   output: Tensor
+         * }}
+         */
+        const outputs = await sessionRun(this.sessions.model, inputs);
+
+        // Post-process the mask output.
+        return this.postProcessMask(outputs['output']);
+    }
+
+    /**
+     * Post-processes the U2Net model's raw output.
+     * @param {Tensor} mask The raw mask output from the model.
+     * @returns {Tensor} Binary mask with applied thresholding.
+     */
+    postProcessMask(mask) {
+        // Squeeze to remove the batch size.
+        mask = mask.squeeze(0);
+        mask = mask.sigmoid();
+
+        // Perform binary thresholding.
+        mask = mask.map(value => value < 0.54 ? 0 : 1);
+
+        // Multiply to convert from decimal to pixel value.
+        mask = mask.mul(255);
+
+        return mask.to('uint8');
+    }
+
+    /**
+     * Runs the model with the provided inputs
+     * @param {Object} model_inputs Model inputs
+     * @returns {Promise<U2NetImageSegmentationOutput>} Object containing segmentation outputs
+     */
+    async _call(model_inputs) {
+        return new U2NetImageSegmentationOutput(await super._call(model_inputs));
+    }
+}
+
+
+/**
+ * Base class for Segment-Anything model's output.
+ */
+export class U2NetImageSegmentationOutput extends ModelOutput {
+    /**
+     * @param {Tensor} output The output of the model.
+     */
+    constructor({ ort_tensor }) {
+        super();
+        this.mask = ort_tensor;
+    }
+}
+//////////////////////////////////////////////////
+
+
+
 //////////////////////////////////////////////////
 // MarianMT models
 export class MarianPreTrainedModel extends PreTrainedModel { };
@@ -7733,6 +7875,7 @@ const MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = new Map([
 const MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING_NAMES = new Map([
     ['detr', ['DetrForSegmentation', DetrForSegmentation]],
     ['maskformer', ['MaskFormerForInstanceSegmentation', MaskFormerForInstanceSegmentation]],
+    ['u2net', ['U2NetModel', U2NetModel]],
 ]);
 
 const MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = new Map([
