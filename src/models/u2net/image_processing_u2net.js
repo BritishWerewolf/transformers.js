@@ -18,9 +18,9 @@ import { ImageProcessor } from "../../base/image_processors_utils.js";
  * Can be overridden by `do_center_crop` in the `preprocess` method.
  * @property {boolean} [do_thumbnail] Whether to resize the image using thumbnail method.
  * @property {boolean} [keep_aspect_ratio] If `true`, the image is resized to the largest possible size such that the aspect ratio is preserved.
- * Can be overidden by `keep_aspect_ratio` in `preprocess`.
+ * Can be overridden by `keep_aspect_ratio` in `preprocess`.
  * @property {number} [ensure_multiple_of] If `do_resize` is `true`, the image is resized to a size that is a multiple of this value.
- * Can be overidden by `ensure_multiple_of` in `preprocess`.
+ * Can be overridden by `ensure_multiple_of` in `preprocess`.
  *
  * @property {number[]} [mean] The mean values for image normalization (same as `image_mean`).
  * @property {number[]} [std] The standard deviation values for image normalization (same as `image_std`).

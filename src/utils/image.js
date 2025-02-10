@@ -345,8 +345,8 @@ export class RawImage {
 
     /**
      * Resize the image to the given dimensions. This method uses the canvas API to perform the resizing.
-     * @param {number} width The width of the new image. `null` or `-1` will preserve the aspect ratio.
-     * @param {number} height The height of the new image. `null` or `-1` will preserve the aspect ratio.
+     * @param {number | null} width The width of the new image. `null` or `-1` will preserve the aspect ratio.
+     * @param {number | null} height The height of the new image. `null` or `-1` will preserve the aspect ratio.
      * @param {Object} options Additional options for resizing.
      * @param {0|1|2|3|4|5|string} [options.resample] The resampling method to use.
      * @returns {Promise<RawImage>} `this` to support chaining.
