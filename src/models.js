@@ -38,6 +38,10 @@
  * @module models
  */
 
+/**
+ * @typedef {Map<string, [string, typeof PreTrainedModel]>} ModelMapping
+ */
+
 import {
     AutoConfig,
     getKeyValueShapes,
@@ -5860,8 +5864,6 @@ export class U2NetModel extends U2NetPreTrainedModel {
 
         // @ts-ignore
         const input_name = this.config.input_name;
-        // @ts-ignore
-        const output_name = this.config.output_composite;
 
         // The provided input should either have a key of `input` or be based on
         // the config `input_name` key.
@@ -5875,10 +5877,7 @@ export class U2NetModel extends U2NetPreTrainedModel {
             [input_name]: model_inputs['input'] ?? model_inputs[input_name],
         };
 
-        const outputs = await sessionRun(this.sessions.model, input);
-
-        // Post-process the mask output.
-        return await this.postProcessMask(outputs[output_name]);
+        return await sessionRun(this.sessions.model, input);
     }
 
     /**
@@ -5915,7 +5914,14 @@ export class U2NetModel extends U2NetPreTrainedModel {
      * @returns {Promise<U2NetImageSegmentationOutput>} Object containing segmentation outputs
      */
     async _call(model_inputs) {
-        return new U2NetImageSegmentationOutput(await super._call(model_inputs));
+        // @ts-ignore
+        const output_name = this.config.output_composite ?? 0;
+
+        const outputs = await super._call(model_inputs);
+        outputs['mask'] = outputs[output_name];
+        outputs['processed_mask'] = await this.postProcessMask(outputs[output_name]);
+
+        return new U2NetImageSegmentationOutput(outputs);
     }
 }
 
@@ -5925,11 +5931,17 @@ export class U2NetModel extends U2NetPreTrainedModel {
  */
 export class U2NetImageSegmentationOutput extends ModelOutput {
     /**
-     * @param {Tensor} output The output of the model.
+     * @typedef {{ mask: Tensor, processed_mask: Tensor, [key: string | number]: Tensor }} U2NetModelOutput
+     * @param {U2NetModelOutput} output The output of the model.
      */
-    constructor(output) {
+    constructor({ mask, processed_mask, ...outputs }) {
         super();
-        this.mask = output;
+
+        this.mask = mask;
+        this.processed_mask = processed_mask;
+
+        // Dynamically assign all properties from outputs to this instance.
+        Object.assign(this, outputs);
     }
 }
 //////////////////////////////////////////////////
@@ -7663,6 +7675,7 @@ const MODEL_MAPPING_NAMES_DECODER_ONLY = new Map([
     ['stablelm', ['StableLmModel', StableLmModel]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = new Map([
     ['speecht5', ['SpeechT5ForSpeechToText', SpeechT5ForSpeechToText]],
     ['whisper', ['WhisperForConditionalGeneration', WhisperForConditionalGeneration]],
@@ -7670,15 +7683,18 @@ const MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = new Map([
     ['moonshine', ['MoonshineForConditionalGeneration', MoonshineForConditionalGeneration]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING_NAMES = new Map([
     ['speecht5', ['SpeechT5ForTextToSpeech', SpeechT5ForTextToSpeech]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES = new Map([
     ['vits', ['VitsModel', VitsModel]],
     ['musicgen', ['MusicgenForConditionalGeneration', MusicgenForConditionalGeneration]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = new Map([
     ['bert', ['BertForSequenceClassification', BertForSequenceClassification]],
     ['modernbert', ['ModernBertForSequenceClassification', ModernBertForSequenceClassification]],
@@ -7701,6 +7717,7 @@ const MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = new Map([
     ['squeezebert', ['SqueezeBertForSequenceClassification', SqueezeBertForSequenceClassification]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = new Map([
     ['bert', ['BertForTokenClassification', BertForTokenClassification]],
     ['modernbert', ['ModernBertForTokenClassification', ModernBertForTokenClassification]],
@@ -7718,6 +7735,7 @@ const MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = new Map([
     ['xlm-roberta', ['XLMRobertaForTokenClassification', XLMRobertaForTokenClassification]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = new Map([
     ['t5', ['T5ForConditionalGeneration', T5ForConditionalGeneration]],
     ['longt5', ['LongT5ForConditionalGeneration', LongT5ForConditionalGeneration]],
@@ -7730,6 +7748,7 @@ const MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = new Map([
     ['blenderbot-small', ['BlenderbotSmallForConditionalGeneration', BlenderbotSmallForConditionalGeneration]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = new Map([
     ['bloom', ['BloomForCausalLM', BloomForCausalLM]],
     ['gpt2', ['GPT2LMHeadModel', GPT2LMHeadModel]],
@@ -7767,11 +7786,13 @@ const MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = new Map([
     ['phi3_v', ['Phi3VForCausalLM', Phi3VForCausalLM]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_MULTIMODALITY_MAPPING_NAMES = new Map([
     ['multi_modality', ['MultiModalityCausalLM', MultiModalityCausalLM]],
 ]);
 
 
+/** @type ModelMapping */
 const MODEL_FOR_MASKED_LM_MAPPING_NAMES = new Map([
     ['bert', ['BertForMaskedLM', BertForMaskedLM]],
     ['modernbert', ['ModernBertForMaskedLM', ModernBertForMaskedLM]],
@@ -7792,6 +7813,7 @@ const MODEL_FOR_MASKED_LM_MAPPING_NAMES = new Map([
     ['squeezebert', ['SqueezeBertForMaskedLM', SqueezeBertForMaskedLM]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = new Map([
     ['bert', ['BertForQuestionAnswering', BertForQuestionAnswering]],
     ['roformer', ['RoFormerForQuestionAnswering', RoFormerForQuestionAnswering]],
@@ -7810,12 +7832,14 @@ const MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = new Map([
     ['squeezebert', ['SqueezeBertForQuestionAnswering', SqueezeBertForQuestionAnswering]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = new Map([
     ['vision-encoder-decoder', ['VisionEncoderDecoderModel', VisionEncoderDecoderModel]],
     ['idefics3', ['Idefics3ForConditionalGeneration', Idefics3ForConditionalGeneration]],
     ['smolvlm', ['SmolVLMForConditionalGeneration', SmolVLMForConditionalGeneration]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = new Map([
     ['llava', ['LlavaForConditionalGeneration', LlavaForConditionalGeneration]],
     ['llava_onevision', ['LlavaOnevisionForConditionalGeneration', LlavaOnevisionForConditionalGeneration]],
@@ -7827,15 +7851,18 @@ const MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = new Map([
     ['paligemma', ['PaliGemmaForConditionalGeneration', PaliGemmaForConditionalGeneration]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_AUDIO_TEXT_TO_TEXT_MAPPING_NAMES = new Map([
     ['ultravox', ['UltravoxModel', UltravoxModel]],
 ]);
 
 
+/** @type ModelMapping */
 const MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = new Map([
     ['vision-encoder-decoder', ['VisionEncoderDecoderModel', VisionEncoderDecoderModel]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = new Map([
     ['vit', ['ViTForImageClassification', ViTForImageClassification]],
     ['ijepa', ['IJepaForImageClassification', IJepaForImageClassification]],
@@ -7861,6 +7888,7 @@ const MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = new Map([
     ['mobilenet_v4', ['MobileNetV4ForImageClassification', MobileNetV4ForImageClassification]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = new Map([
     ['detr', ['DetrForObjectDetection', DetrForObjectDetection]],
     ['rt_detr', ['RTDetrForObjectDetection', RTDetrForObjectDetection]],
@@ -7868,18 +7896,21 @@ const MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = new Map([
     ['yolos', ['YolosForObjectDetection', YolosForObjectDetection]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING_NAMES = new Map([
     ['owlvit', ['OwlViTForObjectDetection', OwlViTForObjectDetection]],
     ['owlv2', ['Owlv2ForObjectDetection', Owlv2ForObjectDetection]],
     ['grounding-dino', ['GroundingDinoForObjectDetection', GroundingDinoForObjectDetection]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES = new Map([
     // TODO: Do not add new models here
     ['detr', ['DetrForSegmentation', DetrForSegmentation]],
     ['clipseg', ['CLIPSegForImageSegmentation', CLIPSegForImageSegmentation]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = new Map([
     ['segformer', ['SegformerForSemanticSegmentation', SegformerForSemanticSegmentation]],
     ['sapiens', ['SapiensForSemanticSegmentation', SapiensForSemanticSegmentation]],
@@ -7891,16 +7922,18 @@ const MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = new Map([
     ['mobilenet_v4', ['MobileNetV4ForSemanticSegmentation', MobileNetV4ForSemanticSegmentation]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING_NAMES = new Map([
     ['detr', ['DetrForSegmentation', DetrForSegmentation]],
     ['maskformer', ['MaskFormerForInstanceSegmentation', MaskFormerForInstanceSegmentation]],
-    ['u2net', ['U2NetModel', U2NetModel]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = new Map([
     ['sam', ['SamModel', SamModel]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_CTC_MAPPING_NAMES = new Map([
     ['wav2vec2', ['Wav2Vec2ForCTC', Wav2Vec2ForCTC]],
     ['wav2vec2-bert', ['Wav2Vec2BertForCTC', Wav2Vec2BertForCTC]],
@@ -7910,6 +7943,7 @@ const MODEL_FOR_CTC_MAPPING_NAMES = new Map([
     ['hubert', ['HubertForCTC', HubertForCTC]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = new Map([
     ['wav2vec2', ['Wav2Vec2ForSequenceClassification', Wav2Vec2ForSequenceClassification]],
     ['wav2vec2-bert', ['Wav2Vec2BertForSequenceClassification', Wav2Vec2BertForSequenceClassification]],
@@ -7920,10 +7954,12 @@ const MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = new Map([
     ['audio-spectrogram-transformer', ['ASTForAudioClassification', ASTForAudioClassification]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES = new Map([
     ['wavlm', ['WavLMForXVector', WavLMForXVector]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES = new Map([
     ['unispeech-sat', ['UniSpeechSatForAudioFrameClassification', UniSpeechSatForAudioFrameClassification]],
     ['wavlm', ['WavLMForAudioFrameClassification', WavLMForAudioFrameClassification]],
@@ -7931,19 +7967,23 @@ const MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES = new Map([
     ['pyannote', ['PyAnnoteForAudioFrameClassification', PyAnnoteForAudioFrameClassification]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_IMAGE_MATTING_MAPPING_NAMES = new Map([
     ['vitmatte', ['VitMatteForImageMatting', VitMatteForImageMatting]],
 ]);
 
+/** @type ModelMapping */
 const MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING_NAMES = new Map([
     ['patchtst', ['PatchTSTForPrediction', PatchTSTForPrediction]],
     ['patchtsmixer', ['PatchTSMixerForPrediction', PatchTSMixerForPrediction]],
 ])
 
+/** @type ModelMapping */
 const MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES = new Map([
     ['swin2sr', ['Swin2SRForImageSuperResolution', Swin2SRForImageSuperResolution]],
 ])
 
+/** @type ModelMapping */
 const MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES = new Map([
     ['dpt', ['DPTForDepthEstimation', DPTForDepthEstimation]],
     ['depth_anything', ['DepthAnythingForDepthEstimation', DepthAnythingForDepthEstimation]],
@@ -7952,16 +7992,19 @@ const MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES = new Map([
     ['depth_pro', ['DepthProForDepthEstimation', DepthProForDepthEstimation]],
 ])
 
+/** @type ModelMapping */
 const MODEL_FOR_NORMAL_ESTIMATION_MAPPING_NAMES = new Map([
     ['sapiens', ['SapiensForNormalEstimation', SapiensForNormalEstimation]],
 ])
 
+/** @type ModelMapping */
 const MODEL_FOR_POSE_ESTIMATION_MAPPING_NAMES = new Map([
     ['vitpose', ['VitPoseForPoseEstimation', VitPoseForPoseEstimation]],
 ])
 
 // NOTE: This is custom to Transformers.js, and is necessary because certain models
 // (e.g., CLIP) are split into vision and text components
+/** @type ModelMapping */
 const MODEL_FOR_IMAGE_FEATURE_EXTRACTION_MAPPING_NAMES = new Map([
     ['clip', ['CLIPVisionModelWithProjection', CLIPVisionModelWithProjection]],
     ['siglip', ['SiglipVisionModel', SiglipVisionModel]],
@@ -8030,7 +8073,7 @@ const CUSTOM_MAPPING = [
     ['JinaCLIPTextModel', JinaCLIPTextModel, MODEL_TYPES.EncoderOnly],
     ['ClapTextModelWithProjection', ClapTextModelWithProjection, MODEL_TYPES.EncoderOnly],
     ['ClapAudioModelWithProjection', ClapAudioModelWithProjection, MODEL_TYPES.EncoderOnly],
-    ['U2NetModel', U2NetModel, MODEL_TYPES.MaskGeneration],
+    ['U2NetModel', U2NetModel, MODEL_TYPES.EncoderOnly],
 
     ['DacEncoderModel', DacEncoderModel, MODEL_TYPES.EncoderOnly],
     ['DacDecoderModel', DacDecoderModel, MODEL_TYPES.EncoderOnly],
